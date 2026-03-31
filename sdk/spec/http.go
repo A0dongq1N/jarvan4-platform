@@ -74,6 +74,11 @@ type Assertion struct {
 	reason string
 }
 
+// NewAssertion 创建断言链（供 Checker 实现调用）。
+func NewAssertion(res *HTTPResponse) *Assertion {
+	return &Assertion{res: res}
+}
+
 func (a *Assertion) Status(code int) *Assertion {
 	if a.failed {
 		return a
