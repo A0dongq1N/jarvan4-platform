@@ -2,7 +2,11 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 
 	appAudit   "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
 	appAuth    "github.com/Aodongq1n/jarvan4-platform/master/internal/application/auth"
@@ -17,6 +21,7 @@ import (
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/trpchandler"
 	infraJWT    "github.com/Aodongq1n/jarvan4-platform/master/internal/infrastructure/jwt"
 	infraMySQL  "github.com/Aodongq1n/jarvan4-platform/master/internal/infrastructure/mysql"
+	"github.com/Aodongq1n/jarvan4-platform/master/internal/infrastructure/nacos"
 	infraRedis  "github.com/Aodongq1n/jarvan4-platform/master/internal/infrastructure/redis"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/infrastructure/rpc"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/infrastructure/sms"
@@ -28,18 +33,63 @@ import (
 	gormplugin "trpc.group/trpc-go/trpc-database/gorm"
 )
 
+// loadNacosConfig 从 Nacos 加载配置。
+// 连接参数从环境变量读取（不含敏感信息）：
+//   NACOS_ADDR      e.g. "9.134.73.4:8848"
+//   NACOS_NAMESPACE e.g. "dev"
+//   NACOS_DATA_ID   e.g. "master.yaml"（默认值）
+//   NACOS_GROUP     e.g. "DEFAULT_GROUP"（默认值）
+func loadNacosConfig() (*nacos.MasterConfig, error) {
+	addr := getEnv("NACOS_ADDR", "9.134.73.4:8848")
+	namespace := getEnv("NACOS_NAMESPACE", "7681a7b6-2c9a-4770-850f-b7c96bbdb7d1")
+	dataID := getEnv("NACOS_DATA_ID", "master.yaml")
+	group := getEnv("NACOS_GROUP", "DEFAULT_GROUP")
+
+	host, portStr, _ := strings.Cut(addr, ":")
+	port, _ := strconv.ParseUint(portStr, 10, 64)
+	if port == 0 {
+		port = 8848
+	}
+
+	return nacos.LoadConfig(nacos.ConfigOptions{
+		ServerAddr:  host,
+		ServerPort:  port,
+		NamespaceID: namespace,
+		DataID:      dataID,
+		Group:       group,
+	})
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 func main() {
-	// ── trpc-go 初始化（读取 trpc_go.yaml）────────────────────────────────
+	// ── 1. 从 Nacos 加载配置 ──────────────────────────────────────────────
+	cfg, err := loadNacosConfig()
+	if err != nil {
+		// Nacos 不可用时降级：从 trpc_go.yaml 读取（本地开发兼容）
+		fmt.Printf("[WARN] nacos config unavailable, fallback to trpc_go.yaml: %v\n", err)
+		cfg = fallbackConfig()
+	}
+
+	// ── 2. trpc-go 初始化（读取 trpc_go.yaml 中的服务/端口配置）────────────
 	s := trpc.NewServer()
 
-	// ── 初始化 DB（从 trpc_go.yaml client 段读取 DSN）────────────────────
+	// ── 3. 初始化 DB（使用 Nacos 配置的 DSN）────────────────────────────────
+	// trpc-go gorm plugin 从 trpc_go.yaml client 段读 DSN，需动态覆盖
+	if err := overrideMySQLDSN(cfg.MySQL.DSN); err != nil {
+		panic("override mysql dsn: " + err.Error())
+	}
 	db, err := gormplugin.NewClientProxy("trpc.mysql.master.db")
 	if err != nil {
 		panic("mysql init failed: " + err.Error())
 	}
 
-	// ── 依赖组装（依赖注入）───────────────────────────────────────────────
-	// infra — MySQL repos
+	// ── 4. 依赖组装 ───────────────────────────────────────────────────────
 	taskRepo    := infraMySQL.NewTaskRepo(db)
 	scriptRepo  := infraMySQL.NewScriptRepo(db)
 	versionRepo := infraMySQL.NewScriptVersionRepo(db)
@@ -52,17 +102,23 @@ func main() {
 	userRepo    := infraMySQL.NewUserRepo(db)
 	auditRepo   := infraMySQL.NewAuditLogRepo(db)
 
-	// infra — Redis cache
 	execCache, errRedis := infraRedis.NewExecutionCache("trpc.redis.master.cache")
 	if errRedis != nil {
 		panic("redis init failed: " + errRedis.Error())
 	}
 
-	// infra — RPC / SMS
 	workerClient := rpc.NewWorkerClient()
 	smsProv      := sms.NewProvider()
 
-	// app services
+	jwtExpire := 24
+	if cfg.JWT.ExpireHours > 0 {
+		jwtExpire = cfg.JWT.ExpireHours
+	}
+	jwtSecret := cfg.JWT.Secret
+	if jwtSecret == "" {
+		jwtSecret = "jarvan4-secret-key"
+	}
+
 	auditSvc   := appAudit.NewService(auditRepo)
 	projectSvc := appProject.NewService(projectRepo)
 	taskSvc    := appTask.NewService(taskRepo, auditRepo)
@@ -70,32 +126,28 @@ func main() {
 	workerSvc  := appWorker.NewService(workerRepo)
 	reportSvc  := appReport.NewService(reportRepo, pointRepo, apiRepo, runRepo, taskRepo)
 	execSvc    := appExec.NewService(runRepo, taskRepo, scriptRepo, workerRepo, reportRepo, pointRepo, apiRepo, workerClient, execCache)
-	authSvc    := appAuth.NewService(userRepo, smsProv, infraJWT.NewIssuer("jarvan4-secret-key", 24))
+	authSvc    := appAuth.NewService(userRepo, smsProv, infraJWT.NewIssuer(jwtSecret, jwtExpire))
 
-	// ── 注册 tRPC 内部服务（:8081，Worker → Master 指标上报）─────────────
+	// ── 5. 注册 tRPC 内部服务（:8081，Worker → Master 指标上报）───────────
 	pbinternal.RegisterMasterInternalService(
 		s.Service("trpc.master.trpc.internal"),
 		trpchandler.NewMasterInternalHandler(execSvc),
 	)
 
-	// ── 注册路由（gorilla/mux，:8080，前端 ↔ Master）─────────────────────
+	// ── 6. 注册路由 ───────────────────────────────────────────────────────
 	r := mux.NewRouter()
 
-	// 公开路由：仅 CORS + Logger，不过 Auth
 	publicChain := func(h http.Handler) http.Handler {
 		return middleware.CORS(middleware.Logger(h))
 	}
-	// 受保护路由：CORS + Logger + Auth
 	authChain := func(h http.Handler) http.Handler {
 		return middleware.CORS(middleware.Logger(middleware.Auth(authSvc)(h)))
 	}
 
-	// 公开路由（登录/发送验证码，无需 token）
 	publicRouter := r.PathPrefix("").Subrouter()
 	authHandler := handler.NewAuthHandler(authSvc, auditSvc)
 	authHandler.RegisterPublic(publicRouter)
 
-	// 受保护路由
 	protectedRouter := r.PathPrefix("").Subrouter()
 	authHandler.RegisterProtected(protectedRouter)
 	handler.NewProjectHandler(projectSvc, auditSvc).Register(protectedRouter)
@@ -106,13 +158,33 @@ func main() {
 	handler.NewWorkerHandler(workerSvc, auditSvc).Register(protectedRouter)
 	handler.NewAuditHandler(auditSvc).Register(protectedRouter)
 
-	// 将两个 subrouter 分别包装中间件后挂到主路由
-	// gorilla/mux subrouter 共享同一底层路由表，需要用 Use() 而非包装 handler
 	publicRouter.Use(func(next http.Handler) http.Handler { return publicChain(next) })
 	protectedRouter.Use(func(next http.Handler) http.Handler { return authChain(next) })
 
-	// 将 mux 注册到 trpc-go HTTP service（不再额外包 chain）
 	thttp.RegisterNoProtocolServiceMux(s.Service("trpc.master.http.api"), r)
 
 	_ = s.Serve()
+}
+
+// overrideMySQLDSN 将 Nacos 下发的 DSN 写入 trpc-go 全局配置
+// trpc-go gorm plugin 从 Client.Service 读取 target，需在 NewClientProxy 前覆盖
+func overrideMySQLDSN(dsn string) error {
+	if dsn == "" {
+		return nil
+	}
+	for _, svc := range trpc.GlobalConfig().Client.Service {
+		if svc.ServiceName == "trpc.mysql.master.db" {
+			svc.Target = "dsn://" + dsn
+			return nil
+		}
+	}
+	return nil
+}
+
+// fallbackConfig 本地开发降级：返回空配置（trpc_go.yaml 保留原值）
+func fallbackConfig() *nacos.MasterConfig {
+	cfg := &nacos.MasterConfig{}
+	cfg.JWT.Secret = "jarvan4-secret-key"
+	cfg.JWT.ExpireHours = 24
+	return cfg
 }
