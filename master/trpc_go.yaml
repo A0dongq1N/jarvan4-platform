@@ -26,15 +26,15 @@ server:
 client:
   timeout: 10000
   service:
-    # MySQL — DSN 从 Nacos 配置中心（master.yaml）注入，此处保留占位供本地 fallback
+    # MySQL — DSN 由 Nacos 配置中心（master.yaml）注入，此处保留本地开发 fallback
     - name: trpc.mysql.master.db
-      target: dsn://root:***@tcp(127.0.0.1:3306)/jarvan4?charset=utf8mb4&parseTime=True&loc=Local
+      target: dsn://root:NFTurbo666@tcp(127.0.0.1:3306)/jarvan4?charset=utf8mb4&parseTime=True&loc=Local
       timeout: 5000
 
-    # Redis — 密码从 Nacos 配置中心注入
+    # Redis — 密码由 Nacos 配置中心注入，此处保留本地开发 fallback
     - name: trpc.redis.master.cache
       target: redis://127.0.0.1:6379
-      password: "***"
+      password: "NFTurbo666"
       timeout: 3000
 
 plugins:

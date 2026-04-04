@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	trpcclient "trpc.group/trpc-go/trpc-go/client"
+
 	appAudit   "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
 	appAuth    "github.com/Aodongq1n/jarvan4-platform/master/internal/application/auth"
 	appExec    "github.com/Aodongq1n/jarvan4-platform/master/internal/application/execution"
@@ -166,19 +168,16 @@ func main() {
 	_ = s.Serve()
 }
 
-// overrideMySQLDSN 将 Nacos 下发的 DSN 写入 trpc-go 全局配置
-// trpc-go gorm plugin 从 Client.Service 读取 target，需在 NewClientProxy 前覆盖
+// overrideMySQLDSN 通过 trpc-go client.RegisterClientConfig 覆盖 MySQL 连接配置
+// 必须在 trpc.NewServer() 之后、NewClientProxy() 之前调用
 func overrideMySQLDSN(dsn string) error {
 	if dsn == "" {
 		return nil
 	}
-	for _, svc := range trpc.GlobalConfig().Client.Service {
-		if svc.ServiceName == "trpc.mysql.master.db" {
-			svc.Target = "dsn://" + dsn
-			return nil
-		}
-	}
-	return nil
+	return trpcclient.RegisterClientConfig("trpc.mysql.master.db", &trpcclient.BackendConfig{
+		ServiceName: "trpc.mysql.master.db",
+		Target:      "dsn://" + dsn,
+	})
 }
 
 // fallbackConfig 本地开发降级：返回空配置（trpc_go.yaml 保留原值）
