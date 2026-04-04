@@ -54,7 +54,7 @@ func toProjectResp(p *domainProject.Project) dto.ProjectResp {
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(defaultQuery(q.Get("page"), "1"))
-	pageSize, _ := strconv.Atoi(defaultQuery(q.Get("page_size"), "20"))
+	pageSize, _ := strconv.Atoi(defaultQuery(q.Get("pageSize"), "20"))
 
 	list, total, err := h.svc.ListProjects(r.Context(), page, pageSize)
 	if err != nil {
