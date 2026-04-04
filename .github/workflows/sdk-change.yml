@@ -1,0 +1,21 @@
+name: SDK Change Detected
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'sdk/**'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remind to rebuild scripts
+        run: |
+          echo "⚠️  SDK 有变更，脚本仓库需要全量重编译"
+          echo "请在 jarvan4-script 仓库手动触发 'Build & Publish Scripts' workflow"
+          echo "触发地址: https://github.com/${{ github.repository_owner }}/jarvan4-script/actions/workflows/build.yml"
+          echo ""
+          echo "变更内容:"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
