@@ -1,4 +1,4 @@
-// Package redis 实现执行实时状态缓存（使用 go-redis/v9 直连）
+// Package redis 实现执行实时状态缓存（使用 trpc-database/goredis）
 package redis
 
 import (
@@ -9,6 +9,7 @@ import (
 	pbinternal "github.com/Aodongq1n/jarvan4-platform/pb/masterinternal"
 	goredisv9 "github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
+	goredis "trpc.group/trpc-go/trpc-database/goredis"
 )
 
 // ExecutionCache 实现 app/execution.ExecutionCache
@@ -16,17 +17,13 @@ type ExecutionCache struct {
 	client goredisv9.UniversalClient
 }
 
-// NewExecutionCacheFromConfig 直接使用 addr 和 password 创建缓存实例。
-// 凭据从 Nacos 配置中心获取，不依赖 trpc_go.yaml。
-func NewExecutionCacheFromConfig(addr, password string, db int) (*ExecutionCache, error) {
-	cli := goredisv9.NewClient(&goredisv9.Options{
-		Addr:     addr,
-		Password: password,
-		DB:       db,
-	})
-	// 快速连通性验证
-	if err := cli.Ping(context.Background()).Err(); err != nil {
-		return nil, fmt.Errorf("redis ping failed: %w", err)
+// NewExecutionCache 通过 trpc-database/goredis 创建缓存实例。
+// 调用前须先通过 overrideRedisConfig 将 Nacos 注入的地址/密码覆盖到 trpc client 配置，
+// 保证 goredis.New 读取的是真实凭据而非 trpc_go.yaml 占位值。
+func NewExecutionCache(target string) (*ExecutionCache, error) {
+	cli, err := goredis.New(target)
+	if err != nil {
+		return nil, err
 	}
 	return &ExecutionCache{client: cli}, nil
 }

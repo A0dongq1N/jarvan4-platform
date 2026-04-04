@@ -26,13 +26,12 @@ server:
 client:
   timeout: 10000
   service:
-    # MySQL — DSN 由 Nacos 配置中心（master.yaml）注入
-    # 本地开发请在 Nacos 或环境变量配置真实 DSN，此处仅作占位
+    # MySQL — DSN 由 Nacos 配置中心（master.yaml）注入，此处仅作 selector 占位
     - name: trpc.mysql.master.db
       target: dsn://***
       timeout: 5000
 
-    # Redis — 凭据由 Nacos 配置中心注入，程序直接使用 go-redis 连接，此配置项已不再读取
+    # Redis — 地址和密码由 Nacos 配置中心注入，main.go 启动时通过 RegisterClientConfig 覆盖
     - name: trpc.redis.master.cache
       target: redis://127.0.0.1:6379
       timeout: 3000

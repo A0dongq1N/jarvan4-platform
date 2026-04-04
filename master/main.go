@@ -104,11 +104,12 @@ func main() {
 	userRepo    := infraMySQL.NewUserRepo(db)
 	auditRepo   := infraMySQL.NewAuditLogRepo(db)
 
-	redisAddr := cfg.Redis.Addr
-	if redisAddr == "" {
-		redisAddr = "127.0.0.1:6379"
+	// ── 3.5. 初始化 Redis（使用 Nacos 配置的地址和密码）──────────────────────
+	// trpc-database/goredis 从 trpc_go.yaml client 段读配置，需动态覆盖
+	if err := overrideRedisConfig(cfg.Redis.Addr, cfg.Redis.Password); err != nil {
+		panic("override redis config: " + err.Error())
 	}
-	execCache, errRedis := infraRedis.NewExecutionCacheFromConfig(redisAddr, cfg.Redis.Password, cfg.Redis.DB)
+	execCache, errRedis := infraRedis.NewExecutionCache("trpc.redis.master.cache")
 	if errRedis != nil {
 		panic("redis init failed: " + errRedis.Error())
 	}
@@ -181,6 +182,22 @@ func overrideMySQLDSN(dsn string) error {
 	return trpcclient.RegisterClientConfig("trpc.mysql.master.db", &trpcclient.BackendConfig{
 		ServiceName: "trpc.mysql.master.db",
 		Target:      "dsn://" + dsn,
+	})
+}
+
+// overrideRedisConfig 通过 trpc-go client.RegisterClientConfig 覆盖 Redis 连接配置
+// 必须在 trpc.NewServer() 之后、goredis.New() 之前调用
+func overrideRedisConfig(addr, password string) error {
+	if addr == "" {
+		addr = "127.0.0.1:6379"
+	}
+	target := "redis://" + addr
+	if password != "" {
+		target = "redis://:" + password + "@" + addr
+	}
+	return trpcclient.RegisterClientConfig("trpc.redis.master.cache", &trpcclient.BackendConfig{
+		ServiceName: "trpc.redis.master.cache",
+		Target:      target,
 	})
 }
 
