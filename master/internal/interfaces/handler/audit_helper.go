@@ -10,7 +10,7 @@ import (
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/middleware"
 )
 
-// clientIP 从请求中提取客户端 IP
+// clientIP 从请求中提取客户端 IP，IPv6 本地回环映射为 127.0.0.1
 func clientIP(r *http.Request) string {
 	if ip := r.Header.Get("X-Real-IP"); ip != "" {
 		return ip
@@ -20,7 +20,17 @@ func clientIP(r *http.Request) string {
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	// ::1 是 IPv6 本地回环，映射为 IPv4 格式
+	if host == "::1" {
+		return "127.0.0.1"
+	}
+	// ::ffff:x.x.x.x 是 IPv4-mapped IPv6，提取 IPv4 部分
+	if parsed := net.ParseIP(host); parsed != nil {
+		if v4 := parsed.To4(); v4 != nil {
+			return v4.String()
+		}
 	}
 	return host
 }
