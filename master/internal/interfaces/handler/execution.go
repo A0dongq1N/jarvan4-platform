@@ -6,23 +6,25 @@ import (
 	"strconv"
 	"time"
 
+	appAudit "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
+	appExec "github.com/Aodongq1n/jarvan4-platform/master/internal/application/execution"
+	"github.com/Aodongq1n/jarvan4-platform/master/internal/domain/audit"
+	domainExec "github.com/Aodongq1n/jarvan4-platform/master/internal/domain/execution"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/dto"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/middleware"
-	appExec "github.com/Aodongq1n/jarvan4-platform/master/internal/application/execution"
-	domainExec "github.com/Aodongq1n/jarvan4-platform/master/internal/domain/execution"
 	"github.com/Aodongq1n/jarvan4-platform/shared/constant"
 	pbinternal "github.com/Aodongq1n/jarvan4-platform/pb/masterinternal"
 	"github.com/gorilla/mux"
 )
 
 // ExecutionHandler 执行相关 handler（前端 ↔ Master HTTP 接口）
-// 注意：Worker → Master 的指标上报通过 tRPC 内部服务（:8081）处理，见 trpchandler/master_internal.go
 type ExecutionHandler struct {
-	svc appExec.ExecutionUseCase
+	svc      appExec.ExecutionUseCase
+	auditSvc appAudit.AuditUseCase
 }
 
-func NewExecutionHandler(svc appExec.ExecutionUseCase) *ExecutionHandler {
-	return &ExecutionHandler{svc: svc}
+func NewExecutionHandler(svc appExec.ExecutionUseCase, auditSvc appAudit.AuditUseCase) *ExecutionHandler {
+	return &ExecutionHandler{svc: svc, auditSvc: auditSvc}
 }
 
 func (h *ExecutionHandler) Register(r *mux.Router) {
@@ -173,6 +175,7 @@ func (h *ExecutionHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto.WriteOK(w, toExecutionStateResp(run))
+	writeAudit(r, h.auditSvc, audit.ActionStartExecution, audit.ResourceExecution, run.ID(), run.TaskID(), "")
 }
 
 func (h *ExecutionHandler) Stop(w http.ResponseWriter, r *http.Request) {
@@ -188,6 +191,7 @@ func (h *ExecutionHandler) Stop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto.WriteOK(w, toExecutionStateResp(run))
+	writeAudit(r, h.auditSvc, audit.ActionStopExecution, audit.ResourceExecution, runID, "", "")
 }
 
 func (h *ExecutionHandler) GetStatus(w http.ResponseWriter, r *http.Request) {

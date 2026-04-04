@@ -5,7 +5,9 @@ import (
 	"net/netip"
 	"strconv"
 
+	appAudit "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
 	appWorker "github.com/Aodongq1n/jarvan4-platform/master/internal/application/worker"
+	"github.com/Aodongq1n/jarvan4-platform/master/internal/domain/audit"
 	domainWorker "github.com/Aodongq1n/jarvan4-platform/master/internal/domain/worker"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/dto"
 	"github.com/Aodongq1n/jarvan4-platform/shared/constant"
@@ -14,11 +16,12 @@ import (
 
 // WorkerHandler Worker 节点相关 handler
 type WorkerHandler struct {
-	svc appWorker.WorkerUseCase
+	svc      appWorker.WorkerUseCase
+	auditSvc appAudit.AuditUseCase
 }
 
-func NewWorkerHandler(svc appWorker.WorkerUseCase) *WorkerHandler {
-	return &WorkerHandler{svc: svc}
+func NewWorkerHandler(svc appWorker.WorkerUseCase, auditSvc appAudit.AuditUseCase) *WorkerHandler {
+	return &WorkerHandler{svc: svc, auditSvc: auditSvc}
 }
 
 func (h *WorkerHandler) Register(r *mux.Router) {
@@ -115,4 +118,5 @@ func (h *WorkerHandler) Offline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto.WriteOK(w, nil)
+	writeAudit(r, h.auditSvc, audit.ActionOfflineWorker, audit.ResourceWorker, workerID, workerID, "")
 }

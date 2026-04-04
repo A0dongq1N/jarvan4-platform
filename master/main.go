@@ -92,18 +92,18 @@ func main() {
 
 	// 公开路由（登录/发送验证码，无需 token）
 	publicRouter := r.PathPrefix("").Subrouter()
-	authHandler := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc, auditSvc)
 	authHandler.RegisterPublic(publicRouter)
 
 	// 受保护路由
 	protectedRouter := r.PathPrefix("").Subrouter()
 	authHandler.RegisterProtected(protectedRouter)
-	handler.NewProjectHandler(projectSvc).Register(protectedRouter)
-	handler.NewTaskHandler(taskSvc).Register(protectedRouter)
-	handler.NewScriptHandler(scriptSvc).Register(protectedRouter)
-	handler.NewExecutionHandler(execSvc).Register(protectedRouter)
+	handler.NewProjectHandler(projectSvc, auditSvc).Register(protectedRouter)
+	handler.NewTaskHandler(taskSvc, auditSvc).Register(protectedRouter)
+	handler.NewScriptHandler(scriptSvc, auditSvc).Register(protectedRouter)
+	handler.NewExecutionHandler(execSvc, auditSvc).Register(protectedRouter)
 	handler.NewReportHandler(reportSvc).Register(protectedRouter)
-	handler.NewWorkerHandler(workerSvc).Register(protectedRouter)
+	handler.NewWorkerHandler(workerSvc, auditSvc).Register(protectedRouter)
 	handler.NewAuditHandler(auditSvc).Register(protectedRouter)
 
 	// 将两个 subrouter 分别包装中间件后挂到主路由

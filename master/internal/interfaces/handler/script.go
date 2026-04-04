@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
+	appAudit "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
 	appScript "github.com/Aodongq1n/jarvan4-platform/master/internal/application/script"
+	"github.com/Aodongq1n/jarvan4-platform/master/internal/domain/audit"
 	domainScript "github.com/Aodongq1n/jarvan4-platform/master/internal/domain/script"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/dto"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/middleware"
@@ -14,11 +16,12 @@ import (
 
 // ScriptHandler 脚本相关 handler
 type ScriptHandler struct {
-	svc appScript.ScriptUseCase
+	svc      appScript.ScriptUseCase
+	auditSvc appAudit.AuditUseCase
 }
 
-func NewScriptHandler(svc appScript.ScriptUseCase) *ScriptHandler {
-	return &ScriptHandler{svc: svc}
+func NewScriptHandler(svc appScript.ScriptUseCase, auditSvc appAudit.AuditUseCase) *ScriptHandler {
+	return &ScriptHandler{svc: svc, auditSvc: auditSvc}
 }
 
 func (h *ScriptHandler) Register(r *mux.Router) {
@@ -106,11 +109,13 @@ func (h *ScriptHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ScriptHandler) Offline(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.OfflineScript(r.Context(), mux.Vars(r)["script_id"], middleware.CurrentUsername(r)); err != nil {
+	scriptID := mux.Vars(r)["script_id"]
+	if err := h.svc.OfflineScript(r.Context(), scriptID, middleware.CurrentUsername(r)); err != nil {
 		dto.WriteFail(w, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
 	dto.WriteOK(w, nil)
+	writeAudit(r, h.auditSvc, audit.ActionDeleteScript, audit.ResourceScript, scriptID, "", "下线脚本")
 }
 
 func (h *ScriptHandler) Publish(w http.ResponseWriter, r *http.Request) {
@@ -119,10 +124,16 @@ func (h *ScriptHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		dto.WriteFail(w, http.StatusBadRequest, 400, err.Error())
 		return
 	}
-	script, err := h.svc.PublishScript(r.Context(), req.ProjectID, req.Name, req.Description, req.CommitHash, req.ArtifactURL, req.CommitMsg, req.Author)
+	sc, err := h.svc.PublishScript(r.Context(), req.ProjectID, req.Name, req.Description, req.CommitHash, req.ArtifactURL, req.CommitMsg, req.Author)
 	if err != nil {
 		dto.WriteFail(w, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
-	dto.WriteOK(w, toScriptResp(script))
+	resp := toScriptResp(sc)
+	dto.WriteOK(w, resp)
+	suffix := req.CommitHash
+	if len(suffix) > 8 {
+		suffix = suffix[:8]
+	}
+	writeAudit(r, h.auditSvc, audit.ActionCreateScript, audit.ResourceScript, resp.ID, resp.Name, "CI发布:"+suffix)
 }
