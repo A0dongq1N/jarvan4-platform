@@ -29,6 +29,7 @@ type MasterConfig struct {
 	} `yaml:"jwt"`
 
 	COS struct {
+		Endpoint  string `yaml:"endpoint"`  // 可选，不填时自动拼接
 		SecretID  string `yaml:"secret_id"`
 		SecretKey string `yaml:"secret_key"`
 		Bucket    string `yaml:"bucket"`
