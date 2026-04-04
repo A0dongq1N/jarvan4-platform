@@ -104,7 +104,11 @@ func main() {
 	userRepo    := infraMySQL.NewUserRepo(db)
 	auditRepo   := infraMySQL.NewAuditLogRepo(db)
 
-	execCache, errRedis := infraRedis.NewExecutionCache("trpc.redis.master.cache")
+	redisAddr := cfg.Redis.Addr
+	if redisAddr == "" {
+		redisAddr = "127.0.0.1:6379"
+	}
+	execCache, errRedis := infraRedis.NewExecutionCacheFromConfig(redisAddr, cfg.Redis.Password, cfg.Redis.DB)
 	if errRedis != nil {
 		panic("redis init failed: " + errRedis.Error())
 	}
