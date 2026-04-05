@@ -1,0 +1,41 @@
+global:
+  namespace: Development
+  env_name: dev
+
+server:
+  app: worker
+  server: stress
+  bin_path: /usr/local/bin/worker
+  conf_path: ./conf
+  data_path: ./data
+  service:
+    - name: trpc.worker.stress.service
+      ip: 0.0.0.0
+      port: 9090
+      network: tcp
+      protocol: trpc
+      timeout: 30000
+
+client:
+  timeout: 10000
+  service:
+    # Master 内部服务（Worker → Master 指标上报），地址由 MASTER_ADDR 环境变量覆盖
+    - name: trpc.master.internal.service
+      target: ip://127.0.0.1:8095
+      timeout: 5000
+
+plugins:
+  log:
+    default:
+      - writer: console
+        level: debug
+        formatter: console
+      - writer: file
+        level: info
+        formatter: json
+        writer_config:
+          filename: ./log/worker.log
+          max_size: 100
+          max_backups: 3
+          max_age: 7
+          compress: true

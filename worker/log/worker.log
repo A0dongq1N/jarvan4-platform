@@ -1,0 +1,13 @@
+{"L":"INFO","T":"2026-04-05 09:30:19.863","C":"client/client_linux.go:35","M":"client trpc.master.internal.service is empowered with tnet! 🤩 "}
+{"L":"INFO","T":"2026-04-05 09:30:19.863","C":"client/client_linux.go:35","M":"client  is empowered with tnet! 🤩 "}
+{"L":"INFO","T":"2026-04-05 09:30:19.863","C":"server/service_linux.go:21","M":"service trpc.worker.stress.service with network tcp and protocol trpc is empowered with tnet! 🤩 you can set 'transport: go-net' in your trpc_go.yaml's service configuration to switch to the golang net framework"}
+{"L":"INFO","T":"2026-04-05 09:30:19.968","C":"tnet/server_transport.go:66","M":"service:trpc.worker.stress.service is using tnet transport, current number of pollers: 1"}
+{"L":"ERROR","T":"2026-04-05 09:30:19.968","C":"tnet/server_transport.go:72","M":"switch to gonet default transport,  trpc-tnet-transport get TCP listener fail, tcp reuseport error: address already in use"}
+{"L":"ERROR","T":"2026-04-05 09:30:19.968","C":"server/service.go:145","M":"process:3580097 service:trpc.worker.stress.service ListenAndServe fail:get tcp listener err: tcp reuseport error:address already in use"}
+{"L":"INFO","T":"2026-04-05 09:30:20.269","C":"admin/admin.go:192","M":"process:3580097, admin server, closed"}
+{"L":"ERROR","T":"2026-04-05 09:30:20.269","C":"server/serve_unix.go:82","M":"service serve errors: 1 error occurred:\n\t* get tcp listener err: tcp reuseport error:address already in use\n\n\nNote: it is normal to have \"use of closed network connection\" error during hot restart.\nDO NOT panic."}
+{"L":"INFO","T":"2026-04-05 09:30:35.163","C":"client/client_linux.go:35","M":"client trpc.master.internal.service is empowered with tnet! 🤩 "}
+{"L":"INFO","T":"2026-04-05 09:30:35.163","C":"client/client_linux.go:35","M":"client  is empowered with tnet! 🤩 "}
+{"L":"INFO","T":"2026-04-05 09:30:35.163","C":"server/service_linux.go:21","M":"service trpc.worker.stress.service with network tcp and protocol trpc is empowered with tnet! 🤩 you can set 'transport: go-net' in your trpc_go.yaml's service configuration to switch to the golang net framework"}
+{"L":"INFO","T":"2026-04-05 09:30:35.267","C":"tnet/server_transport.go:66","M":"service:trpc.worker.stress.service is using tnet transport, current number of pollers: 1"}
+{"L":"INFO","T":"2026-04-05 09:30:35.267","C":"server/service.go:168","M":"process:3583617, trpc service:trpc.worker.stress.service launch success, tcp:0.0.0.0:9090, serving ..."}
