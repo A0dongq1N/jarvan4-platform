@@ -4,6 +4,7 @@ package nacos
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -49,7 +50,7 @@ func Init() error {
 	return nil
 }
 
-// Register 向 Nacos 注册 Worker 实例
+// Register 向 Nacos 注册 Worker 实例，metadata 携带真实节点规格
 // addr 格式: "ip:port"，e.g. "192.168.1.10:9090"
 func Register(addr string) error {
 	if namingClient == nil {
@@ -57,6 +58,10 @@ func Register(addr string) error {
 	}
 	ip, portStr, _ := strings.Cut(addr, ":")
 	port, _ := strconv.ParseUint(portStr, 10, 64)
+
+	cpuCores := runtime.NumCPU()
+	memGB := totalMemGB()
+	maxConcurrency := cpuCores * 125 // 经验值：每核 125 并发
 
 	ok, err := namingClient.RegisterInstance(vo.RegisterInstanceParam{
 		Ip:          ip,
@@ -67,8 +72,13 @@ func Register(addr string) error {
 		Weight:      10,
 		Enable:      true,
 		Healthy:     true,
-		Ephemeral:   true, // 心跳超时后自动摘除
-		Metadata:    map[string]string{"version": "1.0"},
+		Ephemeral:   true,
+		Metadata: map[string]string{
+			"version":         "1.0",
+			"cpu_cores":       strconv.Itoa(cpuCores),
+			"mem_gb":          strconv.FormatFloat(memGB, 'f', 1, 64),
+			"max_concurrency": strconv.Itoa(maxConcurrency),
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("register worker instance: %w", err)
@@ -76,6 +86,8 @@ func Register(addr string) error {
 	if !ok {
 		return fmt.Errorf("register worker instance returned false")
 	}
+	fmt.Printf("[Nacos] registered: addr=%s cpu=%d mem=%.1fGB maxConcurrency=%d\n",
+		addr, cpuCores, memGB, maxConcurrency)
 	return nil
 }
 
@@ -94,6 +106,30 @@ func Deregister(addr string) {
 		GroupName:   groupName,
 		Ephemeral:   true,
 	})
+}
+
+// totalMemGB 读取系统总内存（GB），Linux 读 /proc/meminfo，其他平台返回 0
+func totalMemGB() float64 {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				kb, _ := strconv.ParseFloat(fields[1], 64)
+				return kb / 1024 / 1024 // kB → GB
+			}
+		}
+	}
+	return 0
+}
+
+// InstanceID 返回 Nacos 实例 ID（格式：{ip}#{port}#default#DEFAULT_GROUP@@stress-worker）
+func InstanceID(addr string) string {
+	ip, portStr, _ := strings.Cut(addr, ":")
+	return fmt.Sprintf("%s#%s#%s#%s@@%s", ip, portStr, clusterName, groupName, serviceName)
 }
 
 func getEnv(key, fallback string) string {

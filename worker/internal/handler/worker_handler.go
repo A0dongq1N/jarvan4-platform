@@ -99,7 +99,12 @@ func (h *WorkerHandler) StopTask(ctx context.Context, req *pbworker.StopTaskRequ
 	return &pbworker.Reply{Code: 0, Message: "ok"}, nil
 }
 
-// pickScript 按权重选取脚本（取权重最大的，多脚本混合后续扩展）
+// RunningCount 返回当前正在执行的压测任务数（供心跳上报使用）
+func (h *WorkerHandler) RunningCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.runners)
+}
 func pickScript(scripts []*pbworker.ScriptRef) *pbworker.ScriptRef {
 	best := scripts[0]
 	for _, s := range scripts[1:] {

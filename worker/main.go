@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	pbworker "github.com/Aodongq1n/jarvan4-platform/pb/worker"
 	"github.com/Aodongq1n/jarvan4-platform/shared/cos"
 	"github.com/Aodongq1n/jarvan4-platform/worker/internal/handler"
+	"github.com/Aodongq1n/jarvan4-platform/worker/internal/heartbeat"
 	"github.com/Aodongq1n/jarvan4-platform/worker/internal/loader"
 	workerNacos "github.com/Aodongq1n/jarvan4-platform/worker/internal/nacos"
 	"github.com/Aodongq1n/jarvan4-platform/worker/internal/reporter"
@@ -58,15 +60,26 @@ func main() {
 	)
 
 	// ── 6. 注册到 Nacos（失败不退出，降级为直连模式）──────────────────────
+	var workerID string
 	if err := workerNacos.Init(); err != nil {
 		fmt.Printf("[WARN] nacos init failed: %v\n", err)
 	} else {
 		if err := workerNacos.Register(workerAddr); err != nil {
 			fmt.Printf("[WARN] nacos register failed: %v\n", err)
 		} else {
-			fmt.Printf("[Worker] registered to nacos addr=%s\n", workerAddr)
+			workerID = workerNacos.InstanceID(workerAddr)
+			fmt.Printf("[Worker] registered to nacos addr=%s id=%s\n", workerAddr, workerID)
 			defer workerNacos.Deregister(workerAddr)
 		}
+	}
+
+	// ── 6.5. 启动心跳上报（每 10 秒向 Master 上报 CPU/内存使用率）───────────
+	masterHTTPAddr := getEnv("MASTER_HTTP_ADDR", "127.0.0.1:8090")
+	if workerID != "" {
+		hb := heartbeat.New(masterHTTPAddr, workerID)
+		go hb.Start(context.Background(), func() int {
+			return workerHandler.RunningCount()
+		})
 	}
 
 	// ── 7. 启动服务 ────────────────────────────────────────────────────────

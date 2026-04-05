@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -27,6 +28,7 @@ func NewWorkerHandler(svc appWorker.WorkerUseCase, auditSvc appAudit.AuditUseCas
 func (h *WorkerHandler) Register(r *mux.Router) {
 	r.HandleFunc("/api/workers", h.List).Methods(http.MethodGet)
 	r.HandleFunc("/api/workers/{worker_id}/offline", h.Offline).Methods(http.MethodPost)
+	// 内部心跳接口（Worker 调用，无需 JWT，在 publicRouter 上单独注册）
 }
 
 // toWorkerStatusStr 将 domain 枚举转为前端字符串
@@ -109,6 +111,28 @@ func (h *WorkerHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dto.WriteOK(w, dto.PageData{List: resps, Total: total, Page: page, PageSize: pageSize})
+}
+
+// RegisterInternal 注册无需鉴权的内部接口（挂在 publicRouter 上）
+func (h *WorkerHandler) RegisterInternal(r *mux.Router) {
+	r.HandleFunc("/api/internal/workers/{worker_id}/heartbeat", h.Heartbeat).Methods(http.MethodPost)
+}
+
+// Heartbeat Worker 心跳上报（无需 JWT，Worker 内部调用）
+func (h *WorkerHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
+	workerID := mux.Vars(r)["worker_id"]
+
+	var req dto.WorkerHeartbeatReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		dto.WriteFail(w, http.StatusBadRequest, 400, "invalid request body")
+		return
+	}
+
+	if err := h.svc.Heartbeat(r.Context(), workerID, req.CPUUsage, req.MemUsage, req.Concurrent, ""); err != nil {
+		dto.WriteFail(w, http.StatusInternalServerError, 500, err.Error())
+		return
+	}
+	dto.WriteOK(w, nil)
 }
 
 func (h *WorkerHandler) Offline(w http.ResponseWriter, r *http.Request) {

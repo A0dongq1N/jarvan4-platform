@@ -170,6 +170,9 @@ func main() {
 	authHandler := handler.NewAuthHandler(authSvc, auditSvc)
 	authHandler.RegisterPublic(publicRouter)
 
+	workerHandlerInst := handler.NewWorkerHandler(workerSvc, auditSvc)
+	workerHandlerInst.RegisterInternal(publicRouter) // 心跳接口无需 JWT
+
 	protectedRouter := r.PathPrefix("").Subrouter()
 	authHandler.RegisterProtected(protectedRouter)
 	handler.NewProjectHandler(projectSvc, auditSvc).Register(protectedRouter)
@@ -177,7 +180,7 @@ func main() {
 	handler.NewScriptHandler(scriptSvc, auditSvc).Register(protectedRouter)
 	handler.NewExecutionHandler(execSvc, auditSvc).Register(protectedRouter)
 	handler.NewReportHandler(reportSvc).Register(protectedRouter)
-	handler.NewWorkerHandler(workerSvc, auditSvc).Register(protectedRouter)
+	workerHandlerInst.Register(protectedRouter) // 已在上方实例化
 	handler.NewAuditHandler(auditSvc).Register(protectedRouter)
 
 	publicRouter.Use(func(next http.Handler) http.Handler { return publicChain(next) })

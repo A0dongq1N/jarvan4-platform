@@ -91,6 +91,10 @@ func isPublicPath(path string) bool {
 			return true
 		}
 	}
+	// Worker 心跳：/api/internal/workers/{worker_id}/heartbeat
+	if strings.HasPrefix(path, "/api/internal/workers/") && strings.HasSuffix(path, "/heartbeat") {
+		return true
+	}
 	return false
 }
 

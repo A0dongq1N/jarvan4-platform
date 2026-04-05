@@ -20,3 +20,10 @@ type WorkerNodeResp struct {
 	RunningTaskName    string  `json:"runningTaskName,omitempty"`
 	LastHeartbeat      string  `json:"lastHeartbeat"`
 }
+
+// WorkerHeartbeatReq Worker 心跳上报请求
+type WorkerHeartbeatReq struct {
+	CPUUsage   float64 `json:"cpuUsage"`
+	MemUsage   float64 `json:"memUsage"`
+	Concurrent int     `json:"concurrent"`
+}
