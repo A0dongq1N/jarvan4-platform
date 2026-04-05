@@ -272,6 +272,8 @@ func (s *Service) GenerateReport(ctx context.Context, runID string) error {
 
 	report := domainReport.NewReport(runID, run.TaskID(), "", reportName, summary)
 	report.ID = uuid.NewString()
+	report.StartTime = run.StartTime()
+	report.EndTime = run.EndTime()
 
 	// 回填 api metrics 的 report ID
 	apiMetrics, err := s.apiMetricsRepo.ListByReportID(ctx, runID)

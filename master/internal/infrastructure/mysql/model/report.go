@@ -4,14 +4,16 @@ import "time"
 
 // ReportModel GORM model for `report` table
 type ReportModel struct {
-	ID          uint64    `gorm:"primaryKey;autoIncrement"`
-	BizID       string    `gorm:"column:biz_id;type:varchar(64);not null;uniqueIndex"`
-	RunBizID    string    `gorm:"column:run_id;type:varchar(64);not null;uniqueIndex"`
-	TaskBizID   string    `gorm:"column:task_id;type:varchar(64);not null;index"`
-	ProjectID   string    `gorm:"column:project_id;type:varchar(64);not null"`
-	Name        string    `gorm:"column:name;type:varchar(256);not null"`
-	SummaryJSON string    `gorm:"column:summary_json;type:json"` // ReportSummary JSON
-	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
+	ID          uint64     `gorm:"primaryKey;autoIncrement"`
+	BizID       string     `gorm:"column:biz_id;type:varchar(64);not null;uniqueIndex"`
+	RunBizID    string     `gorm:"column:run_id;type:varchar(64);not null;uniqueIndex"`
+	TaskBizID   string     `gorm:"column:task_id;type:varchar(64);not null;index"`
+	ProjectID   string     `gorm:"column:project_id;type:varchar(64);not null"`
+	Name        string     `gorm:"column:name;type:varchar(256);not null"`
+	SummaryJSON string     `gorm:"column:summary_json;type:json"`
+	StartTime   *time.Time `gorm:"column:start_time"`
+	EndTime     *time.Time `gorm:"column:end_time"`
+	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime"`
 }
 
 func (ReportModel) TableName() string { return "report" }

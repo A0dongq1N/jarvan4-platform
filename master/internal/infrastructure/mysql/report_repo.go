@@ -30,6 +30,8 @@ func toReportModel(rp *domainReport.Report) (*model.ReportModel, error) {
 		ProjectID:   rp.ProjectID,
 		Name:        rp.Name,
 		SummaryJSON: string(summaryJSON),
+		StartTime:   rp.StartTime,
+		EndTime:     rp.EndTime,
 		CreatedAt:   rp.CreatedAt,
 	}, nil
 }
@@ -48,6 +50,8 @@ func toReportDomain(m *model.ReportModel) (*domainReport.Report, error) {
 		ProjectID: m.ProjectID,
 		Name:      m.Name,
 		Summary:   summary,
+		StartTime: m.StartTime,
+		EndTime:   m.EndTime,
 		CreatedAt: m.CreatedAt,
 	}, nil
 }
@@ -64,7 +68,7 @@ func (r *ReportRepo) Save(ctx context.Context, rp *domainReport.Report) error {
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "biz_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"name", "summary_json",
+			"name", "summary_json", "start_time", "end_time",
 		}),
 	}).Create(m).Error
 }

@@ -50,16 +50,23 @@ func toSummaryResp(s domainReport.ReportSummary) dto.MetricsSummaryResp {
 
 // toReportSummaryResp 列表页轻量摘要
 func toReportSummaryResp(rp *domainReport.Report) dto.ReportSummaryResp {
-	return dto.ReportSummaryResp{
+	resp := dto.ReportSummaryResp{
 		ID:        rp.ID,
 		TaskID:    rp.TaskID,
-		TaskName:  rp.Name, // 列表页暂用 name 字段
+		TaskName:  rp.Name,
 		RunID:     rp.RunID,
-		Status:    "success", // 报告存在即为 success
+		Status:    "success",
 		Duration:  rp.Summary.Duration,
 		Summary:   toSummaryResp(rp.Summary),
 		CreatedAt: rp.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
+	if rp.StartTime != nil {
+		resp.StartTime = rp.StartTime.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if rp.EndTime != nil {
+		resp.EndTime = rp.EndTime.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return resp
 }
 
 // toFullReportResp 详情页完整报告

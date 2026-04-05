@@ -11,6 +11,8 @@ type Report struct {
 	ProjectID string
 	Name      string
 	Summary   ReportSummary
+	StartTime *time.Time
+	EndTime   *time.Time
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
