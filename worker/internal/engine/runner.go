@@ -108,13 +108,9 @@ func (r *Runner) runVUStep(ctx context.Context, envMap map[string]string, setupD
 		return
 	}
 
-	var wg sync.WaitGroup
-	var vuCounter int32 // 全局 VU 编号计数器
-
 	for _, step := range steps {
 		select {
 		case <-ctx.Done():
-			wg.Wait()
 			return
 		default:
 		}
@@ -123,50 +119,53 @@ func (r *Runner) runVUStep(ctx context.Context, envMap map[string]string, setupD
 		rampSec := int(step.GetRampTime())
 		durationSec := int(step.GetDuration())
 
-		// 爬坡：每隔 rampSec/target 秒启动一个新 VU
+		// 每个 step 有独立的 ctx，duration 到期后 cancel 让 VU 退出
+		stepCtx, stepCancel := context.WithTimeout(ctx, time.Duration(durationSec)*time.Second)
+
+		var wg sync.WaitGroup
+		var vuCounter int32
+
+		// 爬坡：每隔 interval 启动一个新 VU
 		if rampSec > 0 && target > 0 {
 			interval := time.Duration(rampSec) * time.Second / time.Duration(target)
 			for i := 0; i < target; i++ {
 				select {
-				case <-ctx.Done():
-					wg.Wait()
-					return
+				case <-stepCtx.Done():
+					break
 				case <-time.After(interval):
+				}
+				if stepCtx.Err() != nil {
+					break
 				}
 				vuID := int(atomic.AddInt32(&vuCounter, 1))
 				wg.Add(1)
-				vuCtx, vuCancel := context.WithCancel(ctx)
-				go func(id int, cancel context.CancelFunc) {
+				go func(id int) {
 					defer wg.Done()
-					defer cancel()
-					r.runVU(vuCtx, id, envMap, setupData)
-				}(vuID, vuCancel)
+					r.runVU(stepCtx, id, envMap, setupData)
+				}(vuID)
 			}
 		} else {
 			// 瞬变：同时启动所有 VU
 			for i := 0; i < target; i++ {
 				vuID := int(atomic.AddInt32(&vuCounter, 1))
 				wg.Add(1)
-				vuCtx, vuCancel := context.WithCancel(ctx)
-				go func(id int, cancel context.CancelFunc) {
+				go func(id int) {
 					defer wg.Done()
-					defer cancel()
-					r.runVU(vuCtx, id, envMap, setupData)
-				}(vuID, vuCancel)
+					r.runVU(stepCtx, id, envMap, setupData)
+				}(vuID)
 			}
 		}
 
 		r.collector.SetConcurrent(int32(target))
 
-		// 持续 durationSec 后进入下一阶段
-		select {
-		case <-ctx.Done():
-		case <-time.After(time.Duration(durationSec) * time.Second):
-		}
-	}
+		// 等 step duration 到期（stepCtx 超时会自动触发）
+		<-stepCtx.Done()
+		stepCancel()
 
-	// 等待所有 VU 退出
-	wg.Wait()
+		// 等所有 VU goroutine 退出（当前迭代结束后自然退出）
+		wg.Wait()
+		r.collector.SetConcurrent(0)
+	}
 }
 
 // runVU 单个 VU 持续执行 Default 直到 ctx 取消

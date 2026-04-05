@@ -1,4 +1,4 @@
-// Package nacos Worker 服务注册到 Nacos（供 Master 服务发现）
+// Package nacos Worker 服务注册到 Nacos（供 Master 服务发现）+ 配置加载
 package nacos
 
 import (
@@ -8,10 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nacos-group/nacos-sdk-go/v2/clients"
+	nacosclients "github.com/nacos-group/nacos-sdk-go/v2/clients"
 	"github.com/nacos-group/nacos-sdk-go/v2/clients/naming_client"
-	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
-	"github.com/nacos-group/nacos-sdk-go/v2/vo"
+	nacosconstant "github.com/nacos-group/nacos-sdk-go/v2/common/constant"
+	nacosvo "github.com/nacos-group/nacos-sdk-go/v2/vo"
+	"gopkg.in/yaml.v3"
 )
 
 const serviceName = "stress-worker"
@@ -31,8 +32,8 @@ func Init() error {
 		port = 8848
 	}
 
-	sc := []constant.ServerConfig{{IpAddr: host, Port: port}}
-	cc := constant.ClientConfig{
+	sc := []nacosconstant.ServerConfig{{IpAddr: host, Port: port}}
+	cc := nacosconstant.ClientConfig{
 		NamespaceId:         namespace,
 		TimeoutMs:           5000,
 		NotLoadCacheAtStart: true,
@@ -40,7 +41,7 @@ func Init() error {
 	}
 
 	var err error
-	namingClient, err = clients.NewNamingClient(vo.NacosClientParam{
+	namingClient, err = nacosclients.NewNamingClient(nacosvo.NacosClientParam{
 		ClientConfig:  &cc,
 		ServerConfigs: sc,
 	})
@@ -63,7 +64,7 @@ func Register(addr string) error {
 	memGB := totalMemGB()
 	maxConcurrency := cpuCores * 125 // 经验值：每核 125 并发
 
-	ok, err := namingClient.RegisterInstance(vo.RegisterInstanceParam{
+	ok, err := namingClient.RegisterInstance(nacosvo.RegisterInstanceParam{
 		Ip:          ip,
 		Port:        port,
 		ServiceName: serviceName,
@@ -99,7 +100,7 @@ func Deregister(addr string) {
 	ip, portStr, _ := strings.Cut(addr, ":")
 	port, _ := strconv.ParseUint(portStr, 10, 64)
 
-	_, _ = namingClient.DeregisterInstance(vo.DeregisterInstanceParam{
+	_, _ = namingClient.DeregisterInstance(nacosvo.DeregisterInstanceParam{
 		Ip:          ip,
 		Port:        port,
 		ServiceName: serviceName,
@@ -137,4 +138,51 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// ── 配置加载（从 Nacos 拉取 master.yaml，Worker 复用同一份配置）─────────────
+
+// WorkerConfig Worker 从 Nacos 获取的配置子集
+type WorkerConfig struct {
+	COS struct {
+		SecretID  string `yaml:"secret_id"`
+		SecretKey string `yaml:"secret_key"`
+		Bucket    string `yaml:"bucket"`
+		Region    string `yaml:"region"`
+	} `yaml:"cos"`
+}
+
+// LoadConfig 从 Nacos 拉取 master.yaml 并解析为 WorkerConfig
+func LoadConfig() (*WorkerConfig, error) {
+	addr := getEnv("NACOS_ADDR", "9.134.73.4:8848")
+	namespace := getEnv("NACOS_NAMESPACE", "7681a7b6-2c9a-4770-850f-b7c96bbdb7d1")
+	dataID := getEnv("NACOS_DATA_ID", "master.yaml")
+	group := getEnv("NACOS_GROUP", "DEFAULT_GROUP")
+
+	host, portStr, _ := strings.Cut(addr, ":")
+	port, _ := strconv.ParseUint(portStr, 10, 64)
+	if port == 0 {
+		port = 8848
+	}
+
+	sc := []nacosconstant.ServerConfig{{IpAddr: host, Port: port}}
+	cc := nacosconstant.ClientConfig{
+		NamespaceId: namespace, TimeoutMs: 5000,
+		NotLoadCacheAtStart: true, LogLevel: "warn",
+	}
+	cli, err := nacosclients.NewConfigClient(nacosvo.NacosClientParam{
+		ClientConfig: &cc, ServerConfigs: sc,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("nacos config client: %w", err)
+	}
+	content, err := cli.GetConfig(nacosvo.ConfigParam{DataId: dataID, Group: group})
+	if err != nil {
+		return nil, fmt.Errorf("get config: %w", err)
+	}
+	var cfg WorkerConfig
+	if err := yaml.Unmarshal([]byte(content), &cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	return &cfg, nil
 }

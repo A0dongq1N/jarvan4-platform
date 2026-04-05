@@ -28,17 +28,39 @@ func main() {
 
 	fmt.Printf("[Worker] starting workerAddr=%s masterAddr=%s\n", workerAddr, masterAddr)
 
+	// ── 1.5. 从 Nacos 拉取 COS 配置（优先级高于环境变量）──────────────────
+	cosCfg, err := workerNacos.LoadConfig()
+	if err != nil {
+		fmt.Printf("[WARN] load config from nacos failed, fallback to env: %v\n", err)
+		cosCfg = nil
+	}
+
 	// ── 2. 初始化 COS 客户端（脚本下载）────────────────────────────────────
+	var cosSecretID, cosSecretKey, cosBucket, cosRegion string
+	if cosCfg != nil {
+		cosSecretID  = cosCfg.COS.SecretID
+		cosSecretKey = cosCfg.COS.SecretKey
+		cosBucket    = cosCfg.COS.Bucket
+		cosRegion    = cosCfg.COS.Region
+	}
+	// 环境变量可覆盖 Nacos 配置（本地开发用）
+	if v := getEnv("COS_SECRET_ID", ""); v != "" { cosSecretID = v }
+	if v := getEnv("COS_SECRET_KEY", ""); v != "" { cosSecretKey = v }
+	if v := getEnv("COS_BUCKET", ""); v != "" { cosBucket = v }
+	if v := getEnv("COS_REGION", "ap-guangzhou"); v != "ap-guangzhou" { cosRegion = v }
+	if cosRegion == "" { cosRegion = "ap-guangzhou" }
+
 	cosClient, err := cos.NewClient(cos.Config{
-		SecretID:  getEnv("COS_SECRET_ID", ""),
-		SecretKey: getEnv("COS_SECRET_KEY", ""),
-		Bucket:    getEnv("COS_BUCKET", ""),
-		Region:    getEnv("COS_REGION", "ap-guangzhou"),
+		SecretID:  cosSecretID,
+		SecretKey: cosSecretKey,
+		Bucket:    cosBucket,
+		Region:    cosRegion,
 	})
 	if err != nil {
-		// COS 不可用时不退出，本地测试可以绕过
 		fmt.Printf("[WARN] cos init failed: %v\n", err)
 		cosClient = nil
+	} else {
+		fmt.Printf("[Worker] COS ready bucket=%s region=%s\n", cosBucket, cosRegion)
 	}
 
 	// ── 3. 组装依赖 ────────────────────────────────────────────────────────
