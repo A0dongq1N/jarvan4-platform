@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -134,6 +135,20 @@ func main() {
 	reportSvc  := appReport.NewService(reportRepo, pointRepo, apiRepo, runRepo, taskRepo)
 	execSvc    := appExec.NewService(runRepo, taskRepo, scriptRepo, workerRepo, reportRepo, pointRepo, apiRepo, workerClient, execCache)
 	authSvc    := appAuth.NewService(userRepo, smsProv, infraJWT.NewIssuer(jwtSecret, jwtExpire))
+
+	// ── 4.5. 启动 Worker 服务发现（Nacos 订阅 stress-worker）──────────────────
+	nacosAddr := getEnv("NACOS_ADDR", "9.134.73.4:8848")
+	nacosNS   := getEnv("NACOS_NAMESPACE", "7681a7b6-2c9a-4770-850f-b7c96bbdb7d1")
+	discovery, discErr := nacos.NewWorkerDiscovery(nacosAddr, nacosNS, workerSvc)
+	if discErr != nil {
+		fmt.Printf("[WARN] worker discovery init failed: %v\n", discErr)
+	} else {
+		go func() {
+			if err := discovery.Start(context.Background()); err != nil {
+				fmt.Printf("[WARN] worker discovery start failed: %v\n", err)
+			}
+		}()
+	}
 
 	// ── 5. 注册 tRPC 内部服务（:8081，Worker → Master 指标上报）───────────
 	pbinternal.RegisterMasterInternalService(
