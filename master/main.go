@@ -176,7 +176,7 @@ func main() {
 	protectedRouter := r.PathPrefix("").Subrouter()
 	authHandler.RegisterProtected(protectedRouter)
 	handler.NewProjectHandler(projectSvc, auditSvc).Register(protectedRouter)
-	handler.NewTaskHandler(taskSvc, auditSvc).Register(protectedRouter)
+	handler.NewTaskHandler(taskSvc, scriptSvc, auditSvc).Register(protectedRouter)
 	handler.NewScriptHandler(scriptSvc, auditSvc).Register(protectedRouter)
 	handler.NewExecutionHandler(execSvc, auditSvc).Register(protectedRouter)
 	handler.NewReportHandler(reportSvc).Register(protectedRouter)

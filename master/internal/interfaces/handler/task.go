@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	appAudit "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
-	appTask "github.com/Aodongq1n/jarvan4-platform/master/internal/application/task"
+	appAudit  "github.com/Aodongq1n/jarvan4-platform/master/internal/application/audit"
+	appScript "github.com/Aodongq1n/jarvan4-platform/master/internal/application/script"
+	appTask   "github.com/Aodongq1n/jarvan4-platform/master/internal/application/task"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/domain/audit"
 	domainTask "github.com/Aodongq1n/jarvan4-platform/master/internal/domain/task"
 	"github.com/Aodongq1n/jarvan4-platform/master/internal/interfaces/dto"
@@ -16,12 +17,13 @@ import (
 
 // TaskHandler 任务相关 handler
 type TaskHandler struct {
-	svc      appTask.TaskUseCase
-	auditSvc appAudit.AuditUseCase
+	svc       appTask.TaskUseCase
+	scriptSvc appScript.ScriptUseCase
+	auditSvc  appAudit.AuditUseCase
 }
 
-func NewTaskHandler(svc appTask.TaskUseCase, auditSvc appAudit.AuditUseCase) *TaskHandler {
-	return &TaskHandler{svc: svc, auditSvc: auditSvc}
+func NewTaskHandler(svc appTask.TaskUseCase, scriptSvc appScript.ScriptUseCase, auditSvc appAudit.AuditUseCase) *TaskHandler {
+	return &TaskHandler{svc: svc, scriptSvc: scriptSvc, auditSvc: auditSvc}
 }
 
 func (h *TaskHandler) Register(r *mux.Router) {
@@ -274,7 +276,12 @@ func (h *TaskHandler) BindScript(w http.ResponseWriter, r *http.Request) {
 		dto.WriteFail(w, http.StatusBadRequest, 400, err.Error())
 		return
 	}
-	if err := h.svc.BindScript(r.Context(), vars["task_id"], req.ScriptID, "", req.Weight, middleware.CurrentUsername(r)); err != nil {
+	// 查询脚本名称，存入 task_script 供列表展示
+	scriptName := ""
+	if s, err := h.scriptSvc.GetScript(r.Context(), req.ScriptID); err == nil && s != nil {
+		scriptName = s.Name
+	}
+	if err := h.svc.BindScript(r.Context(), vars["task_id"], req.ScriptID, scriptName, req.Weight, middleware.CurrentUsername(r)); err != nil {
 		dto.WriteFail(w, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
