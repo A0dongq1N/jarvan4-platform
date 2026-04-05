@@ -190,6 +190,8 @@ func (s *Service) AggregateMetrics(ctx context.Context, payload *pbinternal.Metr
 	point := &domainReport.MetricPoint{
 		RunID:      runID,
 		Timestamp:  payload.GetTimestamp(),
+		TotalReqs:  payload.GetTotalReqs(),
+		FailReqs:   payload.GetFailReqs(),
 		QPS:        payload.GetQps(),
 		AvgRT:      payload.GetAvgRtMs(),
 		P95RT:      payload.GetP95RtMs(),
@@ -394,6 +396,7 @@ func failRate(total, fail int64) float64 {
 }
 
 // aggregateSummary 从时序点聚合报告摘要
+// TotalReqs/FailReqs 取最后一个点（累计值），QPS/RT 取均值，MaxRT 取最大值
 func aggregateSummary(points []*domainReport.MetricPoint) domainReport.ReportSummary {
 	if len(points) == 0 {
 		return domainReport.ReportSummary{}
@@ -401,7 +404,6 @@ func aggregateSummary(points []*domainReport.MetricPoint) domainReport.ReportSum
 
 	var totalQPS, totalRT, totalP95, totalP99 float64
 	var maxRT float64
-	var totalReqs, failReqs int64
 
 	for _, p := range points {
 		totalQPS += p.QPS
@@ -413,18 +415,23 @@ func aggregateSummary(points []*domainReport.MetricPoint) domainReport.ReportSum
 		}
 	}
 
+	// TotalReqs/FailReqs 是累计值，取最后一个点（时间最大的点）
+	last := points[len(points)-1]
+	totalReqs := last.TotalReqs
+	failReqs := last.FailReqs
+
 	n := float64(len(points))
 	summary := domainReport.ReportSummary{
-		TotalReqs:   totalReqs,
-		FailReqs:    failReqs,
-		AvgQPS:      totalQPS / n,
-		AvgRT:       totalRT / n,
-		P95RT:       totalP95 / n,
-		P99RT:       totalP99 / n,
-		MaxRT:       maxRT,
+		TotalReqs: totalReqs,
+		FailReqs:  failReqs,
+		AvgQPS:    totalQPS / n,
+		AvgRT:     totalRT / n,
+		P95RT:     totalP95 / n,
+		P99RT:     totalP99 / n,
+		MaxRT:     maxRT,
 	}
 	if totalReqs > 0 {
-		summary.SuccessRate = float64(totalReqs-failReqs) / float64(totalReqs)
+		summary.SuccessRate = float64(totalReqs-failReqs) / float64(totalReqs) * 100
 	}
 	return summary
 }

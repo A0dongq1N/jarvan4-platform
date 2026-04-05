@@ -119,10 +119,12 @@ func (r *MetricsReporter) StartReporting(ctx context.Context, collector *Collect
 			return
 		case <-ticker.C:
 			payload := collector.Snapshot()
-			if err := r.report(ctx, payload); err != nil {
-				// 上报失败不影响压测主流程，仅打印日志
+			// 上报用独立的超时 ctx，不受压测 ctx 影响
+			reportCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			if err := r.report(reportCtx, payload); err != nil {
 				fmt.Printf("[WARN] report metrics failed: %v\n", err)
 			}
+			cancel()
 		}
 	}
 }
@@ -139,6 +141,8 @@ func (r *MetricsReporter) report(ctx context.Context, payload *pbinternal.Metric
 	if rsp.GetCode() != 0 {
 		return fmt.Errorf("AggregateMetrics: code=%d msg=%s", rsp.GetCode(), rsp.GetMessage())
 	}
+	fmt.Printf("[Metrics] reported runID=%s totalReqs=%d qps=%.1f\n",
+		payload.GetRunId(), payload.GetTotalReqs(), payload.GetQps())
 	return nil
 }
 
